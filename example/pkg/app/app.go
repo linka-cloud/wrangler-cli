@@ -1,8 +1,9 @@
 package app
 
 import (
-	cli "github.com/rancher/wrangler-cli"
 	"github.com/spf13/cobra"
+
+	cli "github.com/rancher/wrangler-cli"
 )
 
 func New() *cobra.Command {

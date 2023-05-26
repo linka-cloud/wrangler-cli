@@ -11,6 +11,7 @@ import (
 	"github.com/rancher/wrangler/pkg/signals"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -74,10 +75,26 @@ func Main(cmd *cobra.Command) {
 	}
 }
 
+func makeEnvVar[T comparable](to []func(), name string, vars []string, flags *pflag.FlagSet, fn func(flag string) (T, error)) []func() {
+	var z T
+	for _, v := range vars {
+		to = append(to, func() {
+			v := os.Getenv(v)
+			if v == "" {
+				return
+			}
+			fv, err := fn(name)
+			if err == nil && fv == z {
+				flags.Set(name, v)
+			}
+		})
+	}
+	return to
+}
+
 // Command populates a cobra.Command object by extracting args from struct tags of the
 // Runnable obj passed.  Also the Run method is assigned to the RunE of the command.
 // name = Override the struct field with
-
 func Command(obj Runnable, cmd cobra.Command) *cobra.Command {
 	var (
 		envs     []func()
@@ -99,10 +116,10 @@ func Command(obj Runnable, cmd cobra.Command) *cobra.Command {
 
 		name, alias := name(fieldType.Name, fieldType.Tag.Get("name"), fieldType.Tag.Get("short"))
 		usage := fieldType.Tag.Get("usage")
-		env := strings.Split(fieldType.Tag.Get("env"), ",")
+		envVars := strings.Split(fieldType.Tag.Get("env"), ",")
 		defValue := fieldType.Tag.Get("default")
-		if len(env) == 1 && env[0] == "" {
-			env = nil
+		if len(envVars) == 1 && envVars[0] == "" {
+			envVars = nil
 		}
 		defInt, err := strconv.Atoi(defValue)
 		if err != nil {
@@ -113,8 +130,10 @@ func Command(obj Runnable, cmd cobra.Command) *cobra.Command {
 		switch fieldType.Type.Kind() {
 		case reflect.Int:
 			flags.IntVarP((*int)(unsafe.Pointer(v.Addr().Pointer())), name, alias, defInt, usage)
+			envs = append(envs, makeEnvVar(envs, name, envVars, flags, flags.GetInt)...)
 		case reflect.String:
 			flags.StringVarP((*string)(unsafe.Pointer(v.Addr().Pointer())), name, alias, defValue, usage)
+			envs = append(envs, makeEnvVar(envs, name, envVars, flags, flags.GetString)...)
 		case reflect.Slice:
 			switch fieldType.Tag.Get("split") {
 			case "false":
@@ -129,22 +148,13 @@ func Command(obj Runnable, cmd cobra.Command) *cobra.Command {
 			flags.StringSliceP(name, alias, nil, usage)
 		case reflect.Bool:
 			flags.BoolVarP((*bool)(unsafe.Pointer(v.Addr().Pointer())), name, alias, false, usage)
+			envs = append(envs, makeEnvVar(envs, name, envVars, flags, flags.GetBool)...)
 		default:
 			panic("Unknown kind on field " + fieldType.Name + " on " + objValue.Type().Name())
 		}
 
-		if env != nil {
-			for _, env := range env {
-				envs = append(envs, func() {
-					v := os.Getenv(env)
-					if v != "" {
-						fv, err := flags.GetString(name)
-						if err == nil && (fv == "" || fv == defValue) {
-							flags.Set(name, v)
-						}
-					}
-				})
-			}
+		if len(envVars) == 0 {
+			continue
 		}
 	}
 
