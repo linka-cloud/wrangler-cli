@@ -8,6 +8,8 @@ import (
 	cli "github.com/rancher/wrangler-cli"
 )
 
+type private struct{}
+
 func NewSubCommand() *cobra.Command {
 	return cli.Command(&SubCommand{}, cobra.Command{
 		Short: "Add some short description",
@@ -20,6 +22,8 @@ type SubCommand struct {
 	OptionTwo string `name:"custom-name"`
 	MyBool    bool   `name:"my-bool" env:"MY_BOOL"`
 	MyInt     int    `name:"my-int" env:"MY_INT"`
+
+	privateField private
 }
 
 func (s *SubCommand) Run(cmd *cobra.Command, args []string) error {

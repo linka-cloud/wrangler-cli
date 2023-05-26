@@ -47,6 +47,9 @@ func fields(obj interface{}) []fieldInfo {
 
 	for i := 0; i < objValue.NumField(); i++ {
 		fieldType := objValue.Type().Field(i)
+		if !fieldType.IsExported() {
+			continue
+		}
 		if fieldType.Anonymous && fieldType.Type.Kind() == reflect.Struct {
 			result = append(result, fields(objValue.Field(i).Addr().Interface())...)
 		} else if !fieldType.Anonymous {
