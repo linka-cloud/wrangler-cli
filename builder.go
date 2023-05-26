@@ -78,8 +78,7 @@ func Main(cmd *cobra.Command) {
 	}
 }
 
-func makeEnvVar[T comparable](to []func(), name string, vars []string, flags *pflag.FlagSet, fn func(flag string) (T, error)) []func() {
-	var z T
+func makeEnvVar[T comparable](to []func(), name string, vars []string, defValue T, flags *pflag.FlagSet, fn func(flag string) (T, error)) []func() {
 	for _, v := range vars {
 		to = append(to, func() {
 			v := os.Getenv(v)
@@ -87,7 +86,7 @@ func makeEnvVar[T comparable](to []func(), name string, vars []string, flags *pf
 				return
 			}
 			fv, err := fn(name)
-			if err == nil && fv == z {
+			if err == nil && fv == defValue {
 				flags.Set(name, v)
 			}
 		})
@@ -128,15 +127,17 @@ func Command(obj Runnable, cmd cobra.Command) *cobra.Command {
 		if err != nil {
 			defInt = 0
 		}
+		defValueLower := strings.ToLower(defValue)
+		defBool := defValueLower == "true" || defValueLower == "1" || defValueLower == "yes" || defValueLower == "y"
 
 		flags := c.PersistentFlags()
 		switch fieldType.Type.Kind() {
 		case reflect.Int:
 			flags.IntVarP((*int)(unsafe.Pointer(v.Addr().Pointer())), name, alias, defInt, usage)
-			envs = append(envs, makeEnvVar(envs, name, envVars, flags, flags.GetInt)...)
+			envs = append(envs, makeEnvVar(envs, name, envVars, defInt, flags, flags.GetInt)...)
 		case reflect.String:
 			flags.StringVarP((*string)(unsafe.Pointer(v.Addr().Pointer())), name, alias, defValue, usage)
-			envs = append(envs, makeEnvVar(envs, name, envVars, flags, flags.GetString)...)
+			envs = append(envs, makeEnvVar(envs, name, envVars, defValue, flags, flags.GetString)...)
 		case reflect.Slice:
 			switch fieldType.Tag.Get("split") {
 			case "false":
@@ -151,7 +152,7 @@ func Command(obj Runnable, cmd cobra.Command) *cobra.Command {
 			flags.StringSliceP(name, alias, nil, usage)
 		case reflect.Bool:
 			flags.BoolVarP((*bool)(unsafe.Pointer(v.Addr().Pointer())), name, alias, false, usage)
-			envs = append(envs, makeEnvVar(envs, name, envVars, flags, flags.GetBool)...)
+			envs = append(envs, makeEnvVar(envs, name, envVars, defBool, flags, flags.GetBool)...)
 		default:
 			panic("Unknown kind on field " + fieldType.Name + " on " + objValue.Type().Name())
 		}
